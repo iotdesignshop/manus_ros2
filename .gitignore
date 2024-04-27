@@ -34,3 +34,7 @@
 # External SDKs
 ext/MANUS_Core*
 
+# ROS2 Build Files
+build
+install
+log
