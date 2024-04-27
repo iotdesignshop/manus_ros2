@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+# External SDKs
+ext/MANUS_Core*
+
