@@ -36,7 +36,6 @@ endif()
 # Include directories
 include_directories(
     include
-    ${MANUS_LINUX_PATH}
     ${MANUS_LINUX_PATH}/ManusSDK/include
     ${rclcpp_INCLUDE_DIRS}
     ${sensor_msgs_INCLUDE_DIRS}
@@ -44,8 +43,9 @@ include_directories(
 
 
 add_executable(manus_ros2 
+  src/ClientPlatformSpecific.cpp
   src/manus_ros2.cpp
-  ${MANUS_LINUX_PATH}/ClientPlatformSpecific.cpp)
+  )
 
 # Specify the directory containing the shared library
 set(LIBRARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${MANUS_LINUX_PATH}/ManusSDK/lib)
@@ -55,8 +55,7 @@ set(LIBRARY_FILE ${LIBRARY_DIR}/libManusSDK.so)
 target_link_libraries(manus_ros2
     PRIVATE
     ${rclcpp_LIBRARIES}
-    #${sensor_msgs_LIBRARIES}
-    #${std_msgs_LIBRARIES}
+    ${sensor_msgs_LIBRARIES}
     fmt
     ncurses
     ${LIBRARY_FILE} # Link the library
