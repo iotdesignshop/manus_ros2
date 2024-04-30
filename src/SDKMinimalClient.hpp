@@ -62,11 +62,16 @@ public:
 	ClientReturnCode ShutDown();
 	ClientReturnCode RegisterAllCallbacks();
     ClientReturnCode Update();
-    void Run();
+    bool Run();
 
     static void OnConnectedCallback(const ManusHost* const p_Host);
 
 	static void OnSkeletonStreamCallback(const SkeletonStreamInfo* const p_SkeletonStreamInfo);
+
+	bool HasNewSkeletonData() { return m_HasNewSkeletonData; }
+	ClientSkeletonCollection* CurrentSkeletons() { return m_Skeleton; }
+
+	static SDKMinimalClient* GetInstance() { return s_Instance; }
 
 protected:
 
@@ -84,6 +89,7 @@ protected:
 
 	std::mutex m_SkeletonMutex;
 
+	bool m_HasNewSkeletonData = false;
 	ClientSkeletonCollection* m_NextSkeleton = nullptr;
 	ClientSkeletonCollection* m_Skeleton = nullptr;
 
@@ -93,8 +99,7 @@ protected:
 	std::vector<GestureLandscapeData> m_NewGestureLandscapeData;
 	std::vector<GestureLandscapeData> m_GestureLandscapeData;
 
-	uint32_t m_FirstLeftGloveID = 0;
-	uint32_t m_FirstRightGloveID = 0;
+	uint32_t m_GloveIDs[2] = { 0, 0 }; // ID's for Right ()
 
 	uint32_t m_FrameCounter = 0;
 };
