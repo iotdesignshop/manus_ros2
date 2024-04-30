@@ -1,12 +1,12 @@
-#ifndef _SDK_MINIMAL_CLIENT_HPP_
-#define _SDK_MINIMAL_CLIENT_HPP_
+/// @file SDK
+/// @brief This file contains the SDKMinimalClient class, which is based on the SDKMinimalClient_Linux demo provided
+/// by Manus with some modifications to support two gloves, and to make it easier for our ROS 2 node to interface.
+/// This class is used to connect to the Manus Core and receive the animated skeleton data from it.
+/// @note This class was originally taken from the 2.3.0.1 SDK release, and should be compared against subsequent
+/// releases to ensure that it is up to date.
 
 
-// Set up a Doxygen group.
-/** @addtogroup SDKMinimalClient
- *  @{
- */
-
+#pragma once
 
 #include "ClientPlatformSpecific.hpp"
 #include "ManusSDK.h"
@@ -71,6 +71,9 @@ public:
 	bool HasNewSkeletonData() { return m_HasNewSkeletonData; }
 	ClientSkeletonCollection* CurrentSkeletons() { return m_Skeleton; }
 
+	uint32_t GetRightHandID() { return m_GloveIDs[0]; }
+	uint32_t GetLeftHandID() { return m_GloveIDs[1]; }
+
 	static SDKMinimalClient* GetInstance() { return s_Instance; }
 
 protected:
@@ -104,6 +107,3 @@ protected:
 	uint32_t m_FrameCounter = 0;
 };
 
-// Close the Doxygen group.
-/** @} */
-#endif

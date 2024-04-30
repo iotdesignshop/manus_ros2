@@ -1,18 +1,7 @@
-// Copyright 2016 Open Source Robotics Foundation, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/// @file manus_ros2.cpp
+/// @brief This file contains the main function for the manus_ros2 node, which interfaces with the Manus SDK to
+/// receive animated skeleton data, republishing the events as ROS 2 messages.
 
-// DexHand ROS2 Includes
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -21,15 +10,12 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
-
-// Manus SDK includes
 #include "SDKMinimalClient.hpp"
+#include "manus_math.hpp"
 #include <fstream>
 #include <iostream>
 #include <thread>
 
-// Local Includes
-#include <cmath> // Required for quaternionToEulerAngles
 
 // Needed for isKeyPressed
 #include <unistd.h>
@@ -39,117 +25,31 @@
 using namespace std::chrono_literals;
 using namespace std;
 
-// Scan for a key press - Used to reset wrist position to center
-bool KeyDown()
-{
-	struct termios oldt, newt;
-	int oldf;
-
-	// Get the current terminal settings
-	tcgetattr(STDIN_FILENO, &oldt);
-
-	// Save the current terminal settings so we can restore them later
-	newt = oldt;
-
-	// Disable canonical mode and echo
-	newt.c_lflag &= ~(ICANON | ECHO);
-
-	// Apply the new terminal settings
-	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-	// Set the file descriptor for stdin to non-blocking
-	oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-	fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-
-	// Try to read a character from stdin
-	char ch;
-	ssize_t nread = read(STDIN_FILENO, &ch, 1);
-
-	// Restore the old terminal settings
-	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-
-	// Restore the file descriptor flags
-	fcntl(STDIN_FILENO, F_SETFL, oldf);
-
-	// Check if a character was read
-	if (nread == 1)
-		return true;
-	else
-		return false;
-}
-
-// Quaternion Multiplication operator needed for wrist transform
-ManusQuaternion operator*(const ManusQuaternion &q1, const ManusQuaternion &q2)
-{
-	ManusQuaternion result;
-	result.w = q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z;
-	result.x = q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y;
-	result.y = q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x;
-	result.z = q1.w * q2.z + q1.x * q2.y - q1.y * q2.x + q1.z * q2.w;
-	return result;
-}
-
-// Inverse Quaternaion needed for wrist transform
-ManusQuaternion InverseQuaternion(const ManusQuaternion &q)
-{
-	double norm = q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
-	if (norm == 0.0)
-	{
-		// Avoid division by zero
-		return {1.0, 0.0, 0.0, 0.0}; // Identity quaternion
-	}
-
-	double invNorm = 1.0 / norm;
-	return {q.w * invNorm, -q.x * invNorm, -q.y * invNorm, -q.z * invNorm};
-}
-
 // Global for now to pass joint data between the Manus SDK and ROS2
 double g_euler_joint[24][3] = {0.0};
 
-// QuaternionToEulerAngles - Converts a quaternion to Euler angles
-void QuaternionToEulerAngles(const double *quaternion, double &roll, double &pitch, double &yaw)
-{
-	double qx = quaternion[0];
-	double qy = quaternion[1];
-	double qz = quaternion[2];
-	double qw = quaternion[3];
-
-	// Roll (x-axis rotation)
-	double sinr_cosp = 2.0 * (qw * qx + qy * qz);
-	double cosr_cosp = 1.0 - 2.0 * (qx * qx + qy * qy);
-	roll = std::atan2(sinr_cosp, cosr_cosp);
-
-	// Pitch (y-axis rotation)
-	double sinp = 2.0 * (qw * qy - qz * qx);
-	if (std::abs(sinp) >= 1)
-		pitch = std::copysign(M_PI / 2, sinp); // use 90 degrees if out of range
-	else
-		pitch = std::asin(sinp);
-
-	// Yaw (z-axis rotation)
-	double siny_cosp = 2.0 * (qw * qz + qx * qy);
-	double cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz);
-	yaw = std::atan2(siny_cosp, cosy_cosp);
-}
-
 /* This example creates a subclass of Node and uses std::bind() to register a
  * member function as a callback from the timer. */
-class MinimalPublisher : public rclcpp::Node
+class ManusROS2Publisher : public rclcpp::Node
 {
 public:
-	MinimalPublisher() : Node("dexhand_manus"), count_(0)
+	ManusROS2Publisher() : Node("manus_ros2"), count_(0)
 	{
 		publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("joint_states", 10);
 
-		// timer_ = this->create_wall_timer(33ms, std::bind(&MinimalPublisher::timer_callback, this)); // ~30Hz
-		timer_ = this->create_wall_timer(1ms, std::bind(&MinimalPublisher::timer_callback, this));
+		// timer_ = this->create_wall_timer(33ms, std::bind(&ManusROS2Publisher::timer_callback, this)); // ~30Hz
+		timer_ = this->create_wall_timer(1ms, std::bind(&ManusROS2Publisher::timer_callback, this));
 	}
 
 	// print_joint - prints global joint data from Manus Hand after transform
 	void print_joint(int joint)
 	{
-		std::cout << std::fixed << std::setprecision(5) << "Joint: " << joint << " " << (g_euler_joint[joint][0] >= 0 ? " " : "") << g_euler_joint[joint][0] << " " << (g_euler_joint[joint][1] >= 0 ? " " : "") << g_euler_joint[joint][1] << " " << (g_euler_joint[joint][2] >= 0 ? " " : "") << g_euler_joint[joint][2] << " "
-				  << "\n";
+    RCLCPP_INFO_STREAM(this->get_logger(), 
+		  std::fixed << std::setprecision(5) << "Joint: " << joint << " " 
+        << (g_euler_joint[joint][0] >= 0 ? " " : "") << g_euler_joint[joint][0] << " " 
+        << (g_euler_joint[joint][1] >= 0 ? " " : "") << g_euler_joint[joint][1] << " " 
+        << (g_euler_joint[joint][2] >= 0 ? " " : "") << g_euler_joint[joint][2] << " "
+			  << "\n");
 	}
 
 private:
@@ -234,6 +134,47 @@ private:
 	rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr publisher_;
 	size_t count_;
 };
+
+
+// Scan for a key press - Used to reset wrist position to center
+bool KeyDown()
+{
+	struct termios oldt, newt;
+	int oldf;
+
+	// Get the current terminal settings
+	tcgetattr(STDIN_FILENO, &oldt);
+
+	// Save the current terminal settings so we can restore them later
+	newt = oldt;
+
+	// Disable canonical mode and echo
+	newt.c_lflag &= ~(ICANON | ECHO);
+
+	// Apply the new terminal settings
+	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+	// Set the file descriptor for stdin to non-blocking
+	oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+	fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+
+	// Try to read a character from stdin
+	char ch;
+	ssize_t nread = read(STDIN_FILENO, &ch, 1);
+
+	// Restore the old terminal settings
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+
+	// Restore the file descriptor flags
+	fcntl(STDIN_FILENO, F_SETFL, oldf);
+
+	// Check if a character was read
+	if (nread == 1)
+		return true;
+	else
+		return false;
+}
+
 
 void convertSkeletonDataToROS()
 {
@@ -330,7 +271,7 @@ int main(int argc, char *argv[])
 
 	t_Client.ConnectToHost();
 
-	auto minimal_publisher = std::make_shared<MinimalPublisher>();
+	auto minimal_publisher = std::make_shared<ManusROS2Publisher>();
 
 	// Create an executor to spin the minimal_publisher
 	auto executor = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
