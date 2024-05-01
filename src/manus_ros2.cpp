@@ -18,11 +18,6 @@
 #include <thread>
 
 
-// Needed for isKeyPressed
-#include <unistd.h>
-#include <termios.h>
-#include <fcntl.h>
-
 using namespace std::chrono_literals;
 using namespace std;
 
@@ -37,9 +32,9 @@ public:
 	ManusROS2Publisher() : Node("manus_ros2")
 	{
 		publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("joint_states", 10);
-    manus_left_publisher_ = this->create_publisher<geometry_msgs::msg::PoseArray>("manus_left", 10);
-    manus_right_publisher_ = this->create_publisher<geometry_msgs::msg::PoseArray>("manus_right", 10);
-    publishtimer_ = this->create_wall_timer(33ms, std::bind(&ManusROS2Publisher::timer_callback, this)); // 30Hz publish rate
+    	manus_left_publisher_ = this->create_publisher<geometry_msgs::msg::PoseArray>("manus_left", 10);
+    	manus_right_publisher_ = this->create_publisher<geometry_msgs::msg::PoseArray>("manus_right", 10);
+    	publishtimer_ = this->create_wall_timer(33ms, std::bind(&ManusROS2Publisher::timer_callback, this)); // 30Hz publish rate
 	}
 
 	// print_joint - prints global joint data from Manus Hand after transform
@@ -141,48 +136,15 @@ private:
 
 	rclcpp::TimerBase::SharedPtr publishtimer_;
 	rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr publisher_;
-  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr manus_left_publisher_;
-  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr manus_right_publisher_;
+  	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr manus_left_publisher_;
+  	rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr manus_right_publisher_;
 };
 
 
 // Scan for a key press - Used to reset wrist position to center
 bool KeyDown()
 {
-	struct termios oldt, newt;
-	int oldf;
-
-	// Get the current terminal settings
-	tcgetattr(STDIN_FILENO, &oldt);
-
-	// Save the current terminal settings so we can restore them later
-	newt = oldt;
-
-	// Disable canonical mode and echo
-	newt.c_lflag &= ~(ICANON | ECHO);
-
-	// Apply the new terminal settings
-	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-	// Set the file descriptor for stdin to non-blocking
-	oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-	fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-
-	// Try to read a character from stdin
-	char ch;
-	ssize_t nread = read(STDIN_FILENO, &ch, 1);
-
-	// Restore the old terminal settings
-	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-
-	// Restore the file descriptor flags
-	fcntl(STDIN_FILENO, F_SETFL, oldf);
-
-	// Check if a character was read
-	if (nread == 1)
-		return true;
-	else
-		return false;
+	return false;
 }
 
 
@@ -297,19 +259,28 @@ void convertSkeletonDataToROS(auto &publisher)
 
 }
 
+
 // Main function - Initializes the minimal client and starts the ROS2 node
 int main(int argc, char *argv[])
 {
-	std::cout << "Starting minimal client!\n";
-	SDKMinimalClient t_Client;
-	t_Client.Initialize();
 	rclcpp::init(argc, argv);
-	std::cout << "minimal client is initialized.\n";
-
-	t_Client.ConnectToHost();
-
+	
 	auto publisher = std::make_shared<ManusROS2Publisher>();
 
+	RCLCPP_INFO(publisher->get_logger(), "Starting manus_ros2 node");
+	SDKMinimalClient t_Client(publisher);
+	ClientReturnCode status = t_Client.Initialize();
+
+	if (status != ClientReturnCode::ClientReturnCode_Success)
+	{
+		RCLCPP_ERROR_STREAM(publisher->get_logger(), "Failed to initialize the Manus SDK. Error code: " << (int)status);
+		return 1;
+	}
+	
+	RCLCPP_INFO(publisher->get_logger(), "Connecting to Manus SDK");
+	t_Client.ConnectToHost();
+
+	
 	// Create an executor to spin the minimal_publisher
 	auto executor = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
 	executor->add_node(publisher);
@@ -321,12 +292,11 @@ int main(int argc, char *argv[])
 	// Spin the executor
 	executor->spin();
 
+	// Shutdown the Manus client
+	t_Client.ShutDown();
+
 	// Shutdown ROS 2
 	rclcpp::shutdown();
-
-	// Shutdown the Manus client
-	std::cout << "minimal client is done, shutting down.\n";
-	t_Client.ShutDown();
 
 	return 0;
 }

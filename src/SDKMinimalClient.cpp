@@ -1,6 +1,8 @@
 #include <iostream>
 #include <memory>
 #include <thread>
+#include <cstring>
+
 #include "SDKMinimalClient.hpp"
 #include "ManusSDKTypes.h"
 
@@ -10,7 +12,8 @@
 // Initialize the static member variable
 SDKMinimalClient *SDKMinimalClient::s_Instance = nullptr;
 
-SDKMinimalClient::SDKMinimalClient()
+SDKMinimalClient::SDKMinimalClient(std::shared_ptr<rclcpp::Node> publisher)
+	: m_PublisherNode(publisher)
 {
 	s_Instance = this;
 }
@@ -24,14 +27,16 @@ SDKMinimalClient::~SDKMinimalClient()
 /// This function attempts to resize the console window and then proceeds to initialize the SDK's interface.
 ClientReturnCode SDKMinimalClient::Initialize()
 {
-	if (!PlatformSpecificInitialization())
+	
+	/*if (!PlatformSpecificInitialization())
 	{
 		return ClientReturnCode::ClientReturnCode_FailedPlatformSpecificInitialization;
-	}
+	}*/
 
 	const ClientReturnCode t_IntializeResult = InitializeSDK();
 	if (t_IntializeResult != ClientReturnCode::ClientReturnCode_Success)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to initialize the Manus SDK");
 		return ClientReturnCode::ClientReturnCode_FailedToInitialize;
 	}
 
@@ -47,12 +52,14 @@ ClientReturnCode SDKMinimalClient::InitializeSDK()
 	const SDKReturnCode t_InitializeResult = CoreSdk_Initialize(SessionType::SessionType_CoreSDK);
 	if (t_InitializeResult != SDKReturnCode::SDKReturnCode_Success)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to initialize the SDK");
 		return ClientReturnCode::ClientReturnCode_FailedToInitialize;
 	}
 
 	const ClientReturnCode t_CallBackResults = RegisterAllCallbacks();
 	if (t_CallBackResults != ::ClientReturnCode::ClientReturnCode_Success)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to register all callbacks");
 		return t_CallBackResults;
 	}
 
@@ -88,14 +95,16 @@ ClientReturnCode SDKMinimalClient::ShutDown()
 	const SDKReturnCode t_Result = CoreSdk_ShutDown();
 	if (t_Result != SDKReturnCode::SDKReturnCode_Success)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to shut down the SDK");
 		return ClientReturnCode::ClientReturnCode_FailedToShutDownSDK;
 	}
 
-	if (!PlatformSpecificShutdown())
+	/*if (!PlatformSpecificShutdown())
 	{
 		return ClientReturnCode::ClientReturnCode_FailedPlatformSpecificShutdown;
-	}
+	}*/
 
+	RCLCPP_INFO(m_PublisherNode->get_logger(), "Manus SDK has shut down.");
 	return ClientReturnCode::ClientReturnCode_Success;
 }
 
@@ -110,6 +119,7 @@ ClientReturnCode SDKMinimalClient::RegisterAllCallbacks()
 	const SDKReturnCode t_RegisterSkeletonCallbackResult = CoreSdk_RegisterCallbackForSkeletonStream(*OnSkeletonStreamCallback);
 	if (t_RegisterSkeletonCallbackResult != SDKReturnCode::SDKReturnCode_Success)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to register the skeleton callback");
 		return ClientReturnCode::ClientReturnCode_FailedToInitialize;
 	}
 
@@ -122,13 +132,15 @@ void SDKMinimalClient::ConnectToHost()
 {
 	// first loop until we get a connection
 	std::cout << "minimal client is connecting to host. (make sure it is running)\n";
+	RCLCPP_INFO(m_PublisherNode->get_logger(), "Manus client is connecting to host. (make sure it is running)");
 	while (Connect() != ClientReturnCode::ClientReturnCode_Success)
 	{
-		std::cout << "minimal client could not connect. Trying again in a second.\n";
+		RCLCPP_WARN(m_PublisherNode->get_logger(), "Manus client could not connect. Trying again in a second.");
 		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	}
 
-	std::cout << "minimal client is connected, setting up skeletons.\n";
+	RCLCPP_INFO(m_PublisherNode->get_logger(), "Manus client connected to host.");
+
 	// Upload a simple skeleton with a chain. This will just be a left hand for the first user index.
 	LoadTestSkeleton();
 }
@@ -161,6 +173,7 @@ ClientReturnCode SDKMinimalClient::Connect()
 	SDKReturnCode t_StartResult = CoreSdk_LookForHosts(1, false);
 	if (t_StartResult != SDKReturnCode::SDKReturnCode_Success)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to find hosts");
 		return ClientReturnCode::ClientReturnCode_FailedToFindHosts;
 	}
 
@@ -168,11 +181,13 @@ ClientReturnCode SDKMinimalClient::Connect()
 	SDKReturnCode t_NumberResult = CoreSdk_GetNumberOfAvailableHostsFound(&t_NumberOfHostsFound);
 	if (t_NumberResult != SDKReturnCode::SDKReturnCode_Success)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to find hosts");
 		return ClientReturnCode::ClientReturnCode_FailedToFindHosts;
 	}
 
 	if (t_NumberOfHostsFound == 0)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "No hosts found");
 		return ClientReturnCode::ClientReturnCode_FailedToFindHosts;
 	}
 
@@ -182,6 +197,7 @@ ClientReturnCode SDKMinimalClient::Connect()
 	SDKReturnCode t_HostsResult = CoreSdk_GetAvailableHostsFound(t_AvailableHosts.get(), t_NumberOfHostsFound);
 	if (t_HostsResult != SDKReturnCode::SDKReturnCode_Success)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to find hosts");
 		return ClientReturnCode::ClientReturnCode_FailedToFindHosts;
 	}
 
@@ -189,6 +205,7 @@ ClientReturnCode SDKMinimalClient::Connect()
 
 	if (t_ConnectResult == SDKReturnCode::SDKReturnCode_NotConnected)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to connect to host");
 		return ClientReturnCode::ClientReturnCode_FailedToConnect;
 	}
 
@@ -220,23 +237,24 @@ void SDKMinimalClient::LoadTestSkeleton()
         // Same goes for any other skeleton made for invalid users/gloves.
         t_SKL.settings.skeletonTargetUserIndexData.userIndex = 0; // Just take the first index. make sure this matches in the landscape.
 
-        CopyString(t_SKL.name, sizeof(t_SKL.name), (hand==0)?std::string("RightHand"):std::string("LeftHand"));
-
-
+		strncpy(t_SKL.name, (hand == 0) ? "RightHand" : "LeftHand", sizeof(t_SKL.name));
+        
         SDKReturnCode t_Res = CoreSdk_CreateSkeletonSetup(t_SKL, &t_SklIndex);
-        std::cout << "Skeleton setup created with index: " << t_SklIndex << std::endl;
         if (t_Res != SDKReturnCode::SDKReturnCode_Success)
         {
+			RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to create skeleton setup");
             return;
         }
 
         // setup nodes and chains for the skeleton hand
         if (!SetupHandNodes(t_SklIndex, (hand == 0)))
         {
+			RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to setup hand nodes");
             return;
         }
         if (!SetupHandChains(t_SklIndex, (hand == 0)))
         {
+			RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to setup hand chains");
             return;
         }
 
@@ -244,11 +262,12 @@ void SDKMinimalClient::LoadTestSkeleton()
         t_Res = CoreSdk_LoadSkeleton(t_SklIndex, &m_GloveIDs[hand]);
         if (t_Res != SDKReturnCode::SDKReturnCode_Success)
         {
+			RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to load skeleton");
             return;
         }
         else 
         {
-            std::cout << "Skeleton ID:" << &m_GloveIDs[hand] << " loaded successfully" << std::endl;
+			RCLCPP_INFO_STREAM(m_PublisherNode->get_logger(), "Skeleton ID:" << &m_GloveIDs[hand] << " loaded successfully");
         }
     }
 }
@@ -271,7 +290,7 @@ NodeSetup SDKMinimalClient::CreateNodeSetup(uint32_t p_Id, uint32_t p_ParentId, 
 	NodeSetup t_Node;
 	NodeSetup_Init(&t_Node);
 	t_Node.id = p_Id; // Every ID needs to be unique per node in a skeleton.
-	CopyString(t_Node.name, sizeof(t_Node.name), p_Name);
+	strncpy(t_Node.name, p_Name.c_str(), sizeof(t_Node.name));
 	t_Node.type = NodeType::NodeType_Joint;
 	// Every node should have a parent unless it is the Root node.
 	t_Node.parentID = p_ParentId; // Setting the node ID to its own ID ensures it has no parent.
@@ -367,6 +386,7 @@ bool SDKMinimalClient::SetupHandNodes(uint32_t p_SklIndex, bool isRightHand)
 	SDKReturnCode t_Res = CoreSdk_AddNodeToSkeletonSetup(p_SklIndex, CreateNodeSetup(0, 0, 0, 0, 0, "Hand"));
 	if (t_Res != SDKReturnCode::SDKReturnCode_Success)
 	{
+		RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to Add Node To Skeleton Setup");
 		return false;
 	}
 
@@ -385,7 +405,7 @@ bool SDKMinimalClient::SetupHandNodes(uint32_t p_SklIndex, bool isRightHand)
 				t_Res = CoreSdk_AddNodeToSkeletonSetup(p_SklIndex, CreateNodeSetup(1 + t_FingerId + j, t_ParentID, t_Fingers_Left[i * 4 + j].x, t_Fingers_Left[i * 4 + j].y, t_Fingers_Left[i * 4 + j].z, "fingerdigit"));
 			if (t_Res != SDKReturnCode::SDKReturnCode_Success)
 			{
-				printf("Failed to Add Node To Skeleton Setup. The error given %d.", t_Res);
+				RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to Add Node To Skeleton Setup");
 				return false;
 			}
 			t_ParentID = 1 + t_FingerId + j;
@@ -429,6 +449,7 @@ bool SDKMinimalClient::SetupHandChains(uint32_t p_SklIndex, bool isRightHand)
 		SDKReturnCode t_Res = CoreSdk_AddChainToSkeletonSetup(p_SklIndex, t_Chain);
 		if (t_Res != SDKReturnCode::SDKReturnCode_Success)
 		{
+			RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to Add Chain To Skeleton Setup");
 			return false;
 		}
 	}
@@ -479,6 +500,7 @@ bool SDKMinimalClient::SetupHandChains(uint32_t p_SklIndex, bool isRightHand)
 		SDKReturnCode t_Res = CoreSdk_AddChainToSkeletonSetup(p_SklIndex, t_Chain);
 		if (t_Res != SDKReturnCode::SDKReturnCode_Success)
 		{
+			RCLCPP_ERROR(m_PublisherNode->get_logger(), "Failed to Add Chain To Skeleton Setup");
 			return false;
 		}
 	}

@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "ClientPlatformSpecific.hpp"
+#include "rclcpp/rclcpp.hpp"
 #include "ManusSDK.h"
 #include <mutex>
 #include <vector>
@@ -51,10 +51,10 @@ public:
 	std::vector<ClientSkeleton> skeletons;
 };
 
-class SDKMinimalClient : public SDKClientPlatformSpecific
+class SDKMinimalClient 
 {
 public:
-	SDKMinimalClient();
+	SDKMinimalClient(std::shared_ptr<rclcpp::Node> publisherNode);
 	~SDKMinimalClient();
 	ClientReturnCode Initialize();
 	ClientReturnCode InitializeSDK();
@@ -105,5 +105,7 @@ protected:
 	uint32_t m_GloveIDs[2] = { 0, 0 }; // ID's for Right ()
 
 	uint32_t m_FrameCounter = 0;
+
+	std::shared_ptr<rclcpp::Node> m_PublisherNode;
 };
 

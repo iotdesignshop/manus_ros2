@@ -45,7 +45,6 @@ include_directories(
 
 
 add_executable(manus_ros2 
-  src/ClientPlatformSpecific.cpp
   src/SDKMinimalClient.cpp
   src/manus_math.cpp
   src/manus_ros2.cpp
