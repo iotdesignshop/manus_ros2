@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(fmt REQUIRED)
 
 find_package( PkgConfig REQUIRED )
@@ -39,6 +40,7 @@ include_directories(
     ${MANUS_LINUX_PATH}/ManusSDK/include
     ${rclcpp_INCLUDE_DIRS}
     ${sensor_msgs_INCLUDE_DIRS}
+    ${geometry_msgs_INCLUDE_DIRS}
 )
 
 
@@ -58,6 +60,7 @@ target_link_libraries(manus_ros2
     PRIVATE
     ${rclcpp_LIBRARIES}
     ${sensor_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
     fmt
     ncurses
     ${LIBRARY_FILE} # Link the library

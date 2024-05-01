@@ -1,6 +1,6 @@
 /// @file manus_ros2.cpp
 /// @brief This file contains the main function for the manus_ros2 node, which interfaces with the Manus SDK to
-/// receive animated skeleton data, republishing the events as ROS 2 messages.
+/// receive animated skeleton data, and republishes the events as ROS 2 messages.
 
 #include <chrono>
 #include <functional>
@@ -10,6 +10,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "geometry_msgs/msg/pose_array.hpp"
 #include "SDKMinimalClient.hpp"
 #include "manus_math.hpp"
 #include <fstream>
@@ -26,19 +27,19 @@ using namespace std::chrono_literals;
 using namespace std;
 
 // Global for now to pass joint data between the Manus SDK and ROS2
-double g_euler_joint[24][3] = {0.0};
+float g_euler_joint[24][3] = {0.0};
 
-/* This example creates a subclass of Node and uses std::bind() to register a
- * member function as a callback from the timer. */
+
+/// @brief ROS2 publisher class for the manus_ros2 node
 class ManusROS2Publisher : public rclcpp::Node
 {
 public:
-	ManusROS2Publisher() : Node("manus_ros2"), count_(0)
+	ManusROS2Publisher() : Node("manus_ros2")
 	{
 		publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("joint_states", 10);
-
-		// timer_ = this->create_wall_timer(33ms, std::bind(&ManusROS2Publisher::timer_callback, this)); // ~30Hz
-		timer_ = this->create_wall_timer(1ms, std::bind(&ManusROS2Publisher::timer_callback, this));
+    manus_left_publisher_ = this->create_publisher<geometry_msgs::msg::PoseArray>("manus_left", 10);
+    manus_right_publisher_ = this->create_publisher<geometry_msgs::msg::PoseArray>("manus_right", 10);
+    publishtimer_ = this->create_wall_timer(33ms, std::bind(&ManusROS2Publisher::timer_callback, this)); // 30Hz publish rate
 	}
 
 	// print_joint - prints global joint data from Manus Hand after transform
@@ -51,6 +52,14 @@ public:
         << (g_euler_joint[joint][2] >= 0 ? " " : "") << g_euler_joint[joint][2] << " "
 			  << "\n");
 	}
+
+  void publish_left(geometry_msgs::msg::PoseArray::SharedPtr pose_array) {
+    manus_left_publisher_->publish(*pose_array);
+  }
+
+  void publish_right(geometry_msgs::msg::PoseArray::SharedPtr pose_array) {
+    manus_right_publisher_->publish(*pose_array);
+  }
 
 private:
 	// timer_callback - publishes joint states to ROS2
@@ -130,9 +139,10 @@ private:
 		// std::this_thread::sleep_for(std::chrono::milliseconds(33)); // or roughly 30fps, but good enough to show the results.
 	}
 
-	rclcpp::TimerBase::SharedPtr timer_;
+	rclcpp::TimerBase::SharedPtr publishtimer_;
 	rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr publisher_;
-	size_t count_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr manus_left_publisher_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr manus_right_publisher_;
 };
 
 
@@ -176,15 +186,42 @@ bool KeyDown()
 }
 
 
-void convertSkeletonDataToROS()
+void convertSkeletonDataToROS(auto &publisher)
 {
   ClientSkeletonCollection* csc = SDKMinimalClient::GetInstance()->CurrentSkeletons();
 	if (csc != nullptr && csc->skeletons.size() != 0)
 	{
-    cout << "Skeletons count " << csc->skeletons.size() << endl;
     for (int i=0; i < csc->skeletons.size(); ++i) {
-      cout << i << ": Skeleton " << csc->skeletons[i].info.id << " nodes count " << csc->skeletons[i].info.nodesCount << endl;
+      
+      // Prepare a new PoseArray message for the data
+      auto pose_array = std::make_shared<geometry_msgs::msg::PoseArray>();
+      pose_array->header.stamp = publisher->now();
+
+      // Set the poses for the message
+      for (int j=0; j < csc->skeletons[i].info.nodesCount; ++j) {
+        const auto &joint = csc->skeletons[i].nodes[j];
+        geometry_msgs::msg::Pose pose;
+        pose.position.x = joint.transform.position.x;
+        pose.position.y = joint.transform.position.y;
+        pose.position.z = joint.transform.position.z;
+        pose.orientation.x = joint.transform.rotation.x;
+        pose.orientation.y = joint.transform.rotation.y;
+        pose.orientation.z = joint.transform.rotation.z;
+        pose.orientation.w = joint.transform.rotation.w;
+        pose_array->poses.push_back(pose);
+      }
+
+      // Which hand is this?
+      if (csc->skeletons[i].info.id == SDKMinimalClient::GetInstance()->GetRightHandID()) {
+        pose_array->header.frame_id = "manus_right";
+        publisher->publish_right(pose_array);
+      } else {
+        pose_array->header.frame_id = "manus_left";
+        publisher->publish_left(pose_array);
+      }
+
     }
+
     double roll, pitch, yaw;
     static bool initialized = false;
 		static ManusQuaternion referenceRotation = {1.0, 0.0, 0.0, 0.0}; // Initialize with identity quaternion
@@ -271,15 +308,15 @@ int main(int argc, char *argv[])
 
 	t_Client.ConnectToHost();
 
-	auto minimal_publisher = std::make_shared<ManusROS2Publisher>();
+	auto publisher = std::make_shared<ManusROS2Publisher>();
 
 	// Create an executor to spin the minimal_publisher
 	auto executor = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
-	executor->add_node(minimal_publisher);
+	executor->add_node(publisher);
 
-	// Setup a timer to call t_Client.Run at a fixed rate
-	auto timer = minimal_publisher->create_wall_timer(1ms, [&t_Client]()
-													  { if (t_Client.Run()) convertSkeletonDataToROS(); });
+	// Publish the poses at 50hz
+	auto timer = publisher->create_wall_timer(20ms, [&t_Client,&publisher]()
+													  { if (t_Client.Run()) convertSkeletonDataToROS(publisher); });
 
 	// Spin the executor
 	executor->spin();
