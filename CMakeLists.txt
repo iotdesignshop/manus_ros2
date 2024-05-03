@@ -78,8 +78,6 @@ install(FILES ${LIBRARY_FILE} DESTINATION lib/${PROJECT_NAME})
 # Embed the library into the executable
 set_target_properties(manus_ros2 PROPERTIES
     INSTALL_RPATH "$ORIGIN"
-    BUILD_WITH_INSTALL_RPATH TRUE
-    INSTALL_RPATH_USE_LINK_PATH TRUE
 )
 
 
