@@ -24,6 +24,7 @@ Properly installed, the MANUS SDK should be in:
 /ext/MANUS_Core_2.3.X.X_SDK
 
 **Note: At the time we published this project, we were linking against MANUS_Core_2.3.0.1_SDK**
+
 **Also Note: If you haven't already configured the Linux SDK and dependencies on your machine, you should refer to the process described here https://www.manus-meta.com/knowledge-articles/software-core-2-3-linux-sdk**
 
 ## ROS 2 Messages and Node Functions
