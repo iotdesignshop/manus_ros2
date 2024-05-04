@@ -8,6 +8,11 @@ We originally developed the package for use with the DexHand http://www.dexhand.
 
 That said, this package should work in a generic fashion for any projects wanting to interface Manus VR Gloves to ROS 2 for controls or other purposes. If you find a novel use for it, we'd love to hear what you are doing!
 
+Here is an example video of the manus_ros2 node being used to control our DexHand ROS 2 simulation:
+
+[<img src="https://github.com/iotdesignshop/dexhand_ros2_meta/assets/2821763/1aa798ca-7fbe-4b78-8a0f-3a43b02b361b" width="600">](https://www.youtube.com/watch?v=Wlhi0QKMN1o)
+
+
 ## Intended Platform and Limitations
 On the DexHand project, we primarily use ROS 2 Humble as this is a LTS release of ROS 2. There shouldn't be any great difficulty in getting this package to compile against other versions of ROS. Also, note, we only build against Linux, and are using the MANUS SDK_MinimalClient_Linux project as the base. YMMV on other platforms, but if you do get them working, feel free to send us a PR to incorporate the changes.
 
