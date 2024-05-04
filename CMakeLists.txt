@@ -13,9 +13,6 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(fmt REQUIRED)
 
-find_package( PkgConfig REQUIRED )
-pkg_check_modules ( ncurses++ REQUIRED ncurses++ )
-
 
 # locate the MANUS SDK in the /ext folder
 file(GLOB MANUS_SDK RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "ext/MANUS_Core_*")
@@ -60,7 +57,6 @@ target_link_libraries(manus_ros2
     ${sensor_msgs_LIBRARIES}
     ${geometry_msgs_LIBRARIES}
     fmt
-    ncurses
     ${LIBRARY_FILE} # Link the library
 )
 
